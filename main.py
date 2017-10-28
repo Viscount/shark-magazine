@@ -8,6 +8,9 @@ import codecs
 import os
 import time
 import sys
+from config import config
+import re
+import string
 
 logger = logging.getLogger("logger")
 
@@ -25,6 +28,40 @@ def request_api(url):
         return response.read()
     except Exception as e:
         print type(e), e
+
+
+# 去除句子标点
+def wipe_punctuation(sentence):
+    table = string.maketrans("", "")
+    return sentence.translate(table, string.punctuation+"‘’“”")
+
+
+# 匹配单词与例句
+def mapping_sentence(word_list):
+    word_sentence_dict = dict()
+    sentenceEnders = re.compile('[.!?]')
+    # 遍历每个文件
+    for file in os.listdir(config["data_source_folder"]):
+        with codecs.open(os.path.join(config["data_source_folder"], file), 'r') as f:
+            lines = f.readlines()
+        # 对每一行进行处理，切分出句子
+        for line in lines:
+            sentence_list = sentenceEnders.split(line)
+            for raw_sentence in sentence_list:
+                sentence = wipe_punctuation(raw_sentence.strip())
+                if len(sentence) < 2:
+                    continue
+                word_set = set(sentence.split(' '))
+                # 判断单词表中的词是否存在于句子中
+                for word in word_list:
+                    if word in word_set:
+                        # 更新例句对应字典
+                        if word in word_sentence_dict:
+                            if len(raw_sentence) > word_sentence_dict[word]:
+                                word_sentence_dict[word] = raw_sentence
+                        else:
+                            word_sentence_dict[word] = raw_sentence
+    return word_sentence_dict
 
 
 # 查词功能
@@ -54,32 +91,32 @@ def format_word(file_writer, word_detail):
         for part in symbol["parts"]:
             meaning = ";".join(mean for mean in part["means"])
             file_writer.write("- " + part["part"] + meaning + '\n')
-
+        file_writer.write("##### 例句\n")
+        file_writer.write(">"+word_detail["sentence"]+"\n")
+        file_writer.write("```\n")
+        file_writer.write("//笔记区\n")
+        file_writer.write("-\n")
+        file_writer.write("-\n")
+        file_writer.write("```\n")
 
 if __name__ == "__main__":
-    # JSON 字段解释(英文)
-    # {
-    #     'word_name':'' #单词
-    #     'exchange': '' #单词的各种时态
-    #     'symbols':'' #单词各种信息 下面字段都是这个字段下面的
-    #         'ph_en': '' #英式音标
-    #         'ph_am': '' #美式音标
-    #         'ph_en_mp3':'' #英式发音
-    #         'ph_am_mp3': '' #美式发音
-    #         'ph_tts_mp3': '' #TTS发音
-    #         'parts':'' #词的各种意思
-    # }
-
     word_list = []
-    with codecs.open(os.path.join("data", "other-1587-80%-去cet6.csv"), 'r') as f:
+    with codecs.open(config["vocabulary_file_path"], 'r') as f:
         word_list = f.readlines()
 
-    with codecs.open("Economist.md", 'w', encoding="utf-8") as f:
-        f.write("# Economist Word List\n")
+    words = []
+    for line in word_list:
+        content = line.split(',')
+        words.append(content[0].strip())
+    word_sentence_dict = mapping_sentence(words)
+
+    with codecs.open(config["output_file_name"], 'w', encoding="utf-8") as f:
+        f.write("# " + config["outpuf_file_title"] + "\n")
         for line in word_list:
             content = line.split(',')
             word_detail = search_word(content[0].strip())
             word_detail["frequency"] = content[2].strip()
+            word_detail["sentence"] = word_sentence_dict[content[0].strip()]
             if "word_name" in word_detail:
                 format_word(f, word_detail)
             else:
