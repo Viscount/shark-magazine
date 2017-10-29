@@ -58,9 +58,9 @@ def mapping_sentence(word_list):
                         # 更新例句对应字典
                         if word in word_sentence_dict:
                             if len(raw_sentence) > word_sentence_dict[word]:
-                                word_sentence_dict[word] = raw_sentence
+                                word_sentence_dict[word] = raw_sentence.strip()
                         else:
-                            word_sentence_dict[word] = raw_sentence
+                            word_sentence_dict[word] = raw_sentence.strip()
     return word_sentence_dict
 
 
@@ -116,7 +116,10 @@ if __name__ == "__main__":
             content = line.split(',')
             word_detail = search_word(content[0].strip())
             word_detail["frequency"] = content[2].strip()
-            word_detail["sentence"] = word_sentence_dict[content[0].strip()]
+            if content[0].strip() in word_sentence_dict:
+                word_detail["sentence"] = word_sentence_dict[content[0].strip()]
+            else:
+                word_detail["sentence"] = "暂无例句"
             if "word_name" in word_detail:
                 format_word(f, word_detail)
             else:
