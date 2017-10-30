@@ -21,7 +21,7 @@ sys.setdefaultencoding("utf-8")
 # 发起请求
 def request_api(url):
     try:
-        time.sleep(1)
+        time.sleep(0.5)
         logger.info("Requesting url: " + url)
         response = urllib2.urlopen(url, timeout=10)
         logger.info("Response: " + str(response.code))
@@ -34,6 +34,32 @@ def request_api(url):
 def wipe_punctuation(sentence):
     table = string.maketrans("", "")
     return sentence.translate(table, string.punctuation+"‘’“”")
+
+
+# 重新排序
+def shuffle_words(lines):
+    new_lines = []
+    index = 0
+    back_index = len(lines)-1
+    while True:
+        flag = False
+        for count in range(0, 5):
+            new_lines.append(lines[index])
+            index += 1
+            if index >= back_index:
+                flag = True
+                break
+        if flag:
+            break
+        for count in range(0, 5):
+            new_lines.append(lines[back_index])
+            back_index -= 1
+            if back_index <= index:
+                flag = True
+                break
+        if flag:
+            break
+    return new_lines
 
 
 # 匹配单词与例句
@@ -81,7 +107,9 @@ def search_word(word):
 # 格式化输出到文件
 def format_word(file_writer, word_detail):
     file_writer.write("### " + word_detail["word_name"] + '\n')
+    count = 0
     for symbol in word_detail["symbols"]:
+        count += 1
         if "ph_en" in symbol and symbol["ph_en"] is not None:
             file_writer.write("**英音** " + '/' + symbol["ph_en"] + '/ ')
         if "ph_am" in symbol and symbol["ph_am"] is not None:
@@ -98,6 +126,9 @@ def format_word(file_writer, word_detail):
         file_writer.write("-\n")
         file_writer.write("-\n")
         file_writer.write("```\n")
+        if count == 10:
+            count = 0
+            file_writer.write("***\n")
 
 if __name__ == "__main__":
     word_list = []
@@ -109,6 +140,8 @@ if __name__ == "__main__":
         content = line.split(',')
         words.append(content[0].strip())
     word_sentence_dict = mapping_sentence(words)
+
+    word_list = shuffle_words(word_list)
 
     with codecs.open(config["output_file_name"], 'w', encoding="utf-8") as f:
         f.write("# " + config["outpuf_file_title"] + "\n")
