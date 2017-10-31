@@ -11,6 +11,10 @@ import sys
 from config import config
 import re
 import string
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
+from urllib2 import URLError
+from socket import timeout
+from ssl import SSLError
 
 logger = logging.getLogger("logger")
 
@@ -19,6 +23,8 @@ sys.setdefaultencoding("utf-8")
 
 
 # 发起请求
+@retry(retry=retry_if_exception_type(URLError) | retry_if_exception_type(timeout) | retry_if_exception_type(SSLError),
+       stop=stop_after_attempt(3), wait=wait_fixed(1))
 def request_api(url):
     try:
         time.sleep(0.5)
@@ -92,6 +98,12 @@ def mapping_sentence(word_list):
 
 # 查词功能
 def search_word(word):
+    if os.path.exists(os.path.join(config["local_dictionary"], word + ".json")):
+        with codecs.open(os.path.join(config["local_dictionary"], word + ".json"), 'r') as f:
+            lines = f.readlines()
+        content = "".join(lines)
+        result_dict = json.loads(content)
+        return result_dict
     parameters = {
         "w": word,
         "type": 'json',
@@ -100,6 +112,8 @@ def search_word(word):
     web_dict_url = "http://dict-co.iciba.com/api/dictionary.php?"
     para_string = "&".join(key + "=" + str(parameters[key]) for key in parameters)
     raw_content = request_api(web_dict_url + para_string)
+    with codecs.open(os.path.join(config["local_dictionary"], word + ".json"), 'w') as f:
+        f.write(raw_content)
     result_dict = json.loads(raw_content)
     return result_dict
 
@@ -107,28 +121,28 @@ def search_word(word):
 # 格式化输出到文件
 def format_word(file_writer, word_detail):
     file_writer.write("### " + word_detail["word_name"] + '\n')
-    count = 0
+    file_writer.write("\n")
     for symbol in word_detail["symbols"]:
-        count += 1
         if "ph_en" in symbol and symbol["ph_en"] is not None:
             file_writer.write("**英音** " + '/' + symbol["ph_en"] + '/ ')
         if "ph_am" in symbol and symbol["ph_am"] is not None:
             file_writer.write("**美音** " + '/' + symbol["ph_am"] + '/ ')
         file_writer.write("**词频**: 前 " + word_detail["frequency"] + '%  \n')
+        file_writer.write("\n")
         file_writer.write("##### 释义\n")
+        file_writer.write("\n")
         for part in symbol["parts"]:
             meaning = ";".join(mean for mean in part["means"])
             file_writer.write("- " + part["part"] + meaning + '\n')
+        file_writer.write("\n")
         file_writer.write("##### 例句\n")
+        file_writer.write("\n")
         file_writer.write(">"+word_detail["sentence"]+"\n")
         file_writer.write("```\n")
         file_writer.write("//笔记区\n")
-        file_writer.write("-\n")
-        file_writer.write("-\n")
+        file_writer.write("*\n")
+        file_writer.write("*\n")
         file_writer.write("```\n")
-        if count == 10:
-            count = 0
-            file_writer.write("***\n")
 
 if __name__ == "__main__":
     word_list = []
@@ -145,6 +159,8 @@ if __name__ == "__main__":
 
     with codecs.open(config["output_file_name"], 'w', encoding="utf-8") as f:
         f.write("# " + config["outpuf_file_title"] + "\n")
+        f.write("## Section 1\n")
+        count = 0
         for line in word_list:
             content = line.split(',')
             word_detail = search_word(content[0].strip())
@@ -155,6 +171,10 @@ if __name__ == "__main__":
                 word_detail["sentence"] = "暂无例句"
             if "word_name" in word_detail:
                 format_word(f, word_detail)
+                count += 1
+                if count % 10 == 0:
+                    f.write("***\n")
+                    f.write("## Section " + str(count / 10 + 1) + "\n")
             else:
                 continue
 
